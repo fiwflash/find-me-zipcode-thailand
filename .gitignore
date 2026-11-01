@@ -1,0 +1,17 @@
+# OS files
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.bak
+
+# Node dependencies (ถ้ามีในอนาคต)
+node_modules/
+npm-debug.log*
+
+# Logs
+*.log

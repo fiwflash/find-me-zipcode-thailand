@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ค้นหารหัสไปรษณีย์ (Offline)</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: 'Sarabun', 'Segoe UI', Tahoma, sans-serif;
+    margin: 0;
+    padding: 16px;
+    background: #f1f5f9;
+    color: #1e293b;
+    font-size: 14px;
+  }
+  .container { max-width: 960px; margin: 0 auto; }
+  h1 { font-size: 20px; margin: 0 0 4px; color: #0f172a; }
+  .subtitle { font-size: 12px; color: #64748b; margin-bottom: 16px; }
+  .search-bar {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+  .search-bar input {
+    padding: 10px 12px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    font-size: 14px;
+    font-family: inherit;
+    outline: none;
+    transition: border-color 0.15s;
+    min-width: 0;
+  }
+  .search-bar input:focus {
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+  }
+  .actions { display: flex; gap: 8px; margin-bottom: 16px; }
+  .actions button {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  #searchBtn { background: #2563eb; color: white; flex: 1; }
+  #searchBtn:hover { background: #1d4ed8; }
+  #resetBtn { background: #e2e8f0; color: #475569; }
+  #resetBtn:hover { background: #cbd5e1; }
+
+  #status {
+    font-size: 13px;
+    padding: 10px 14px;
+    border-radius: 8px;
+    margin-bottom: 12px;
+    display: none;
+  }
+  #status.info    { display: block; background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe; }
+  #status.warn    { display: block; background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; }
+  #status.error   { display: block; background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
+  #status.success { display: block; background: #dcfce7; color: #166534; border: 1px solid #86efac; }
+
+  .summary { font-size: 13px; color: #475569; margin: 0 0 10px; font-weight: 600; }
+  .zip-row {
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 10px;
+    display: grid;
+    grid-template-columns: 90px 1fr;
+    gap: 12px;
+    align-items: start;
+    transition: border-color 0.15s;
+  }
+  .zip-row.has-warning {
+    background: #fffbeb;
+    border-color: #fcd34d;
+    border-left: 4px solid #f59e0b;
+  }
+  .zip-code {
+    font-size: 22px;
+    font-weight: 700;
+    color: #0f172a;
+    font-family: 'Courier New', monospace;
+    letter-spacing: 1px;
+  }
+  .zip-row.has-warning .zip-code { color: #b45309; }
+  .addr-list { display: flex; flex-direction: column; gap: 4px; }
+  .addr-item {
+    font-size: 13px;
+    padding: 4px 8px;
+    border-radius: 6px;
+    cursor: pointer;
+    color: #334155;
+    transition: background 0.12s;
+  }
+  .addr-item:hover { background: #dbeafe; color: #1e40af; }
+  .warning {
+    grid-column: 1 / -1;
+    margin-top: 8px;
+    padding: 10px 12px;
+    background: #fef3c7;
+    border: 1px solid #fcd34d;
+    border-radius: 8px;
+    font-size: 12px;
+    line-height: 1.6;
+    color: #92400e;
+    white-space: pre-line;
+    word-break: break-word;
+  }
+  .warning-title { font-weight: 700; margin-bottom: 4px; color: #b45309; }
+  #showMoreBtn {
+    display: block;
+    width: 100%;
+    padding: 10px;
+    background: #f1f5f9;
+    border: 1px dashed #94a3b8;
+    border-radius: 8px;
+    color: #475569;
+    font-size: 13px;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    margin-top: 4px;
+  }
+  #showMoreBtn:hover { background: #e2e8f0; border-color: #64748b; }
+  @media (max-width: 640px) {
+    .search-bar { grid-template-columns: repeat(2, 1fr); }
+    .zip-row { grid-template-columns: 1fr; }
+    .zip-code { font-size: 20px; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>🔍 ค้นหารหัสไปรษณีย์ <span style="font-size:11px;color:#94a3b8;font-weight:400;">(offline)</span></h1>
+  <p class="subtitle">
+    กรอกอย่างน้อย 2 ช่อง · หรือกรอกรหัสไปรษณีย์ 5 หลักช่องเดียวก็ได้ · กดที่ผลลัพธ์เพื่อตัดช้อย
+  </p>
+
+  <div class="search-bar">
+    <input id="f-tambon"   list="dl-tambon"   placeholder="ตำบล / แขวง"  autocomplete="off">
+    <input id="f-amphure"  list="dl-amphure"  placeholder="อำเภอ / เขต"  autocomplete="off">
+    <input id="f-province" list="dl-province" placeholder="จังหวัด"      autocomplete="off">
+    <input id="f-zip"      list="dl-zip"      placeholder="รหัสไปรษณีย์" maxlength="5" inputmode="numeric" autocomplete="off">
+  </div>
+
+  <datalist id="dl-tambon"></datalist>
+  <datalist id="dl-amphure"></datalist>
+  <datalist id="dl-province"></datalist>
+  <datalist id="dl-zip"></datalist>
+
+  <div class="actions">
+    <button id="searchBtn">🔍 ค้นหา</button>
+    <button id="resetBtn">ล้าง</button>
+  </div>
+
+  <div id="status"></div>
+  <div id="results"></div>
+</div>
+
+<!-- ========================================== -->
+<!-- ฝัง JSON: database.json (provinces/districts/sub_districts) -->
+<!-- วิธี: copy JSON ทั้งก้อนมาวางแทนที่บรรทัด "PASTE_PROVINCES_JSON_HERE" -->
+<!-- ========================================== -->
+<script id="db-provinces" type="application/json">PASTE_PROVINCES_JSON_HERE</script>
+
+<!-- ========================================== -->
+<!-- ฝัง JSON: overlap_cases_database.json -->
+<!-- วิธี: copy JSON ทั้งก้อนมาวางแทนที่บรรทัด "PASTE_OVERLAPS_JSON_HERE" -->
+<!-- ========================================== -->
+<script id="db-overlaps" type="application/json">PASTE_OVERLAPS_JSON_HERE</script>
+
+<script>
+'use strict';
+
+// ==========================================
+// ⚙️ CONFIG (OFFLINE)
+// ==========================================
+const PAGE_SIZE = 20;
+
+// ==========================================
+// 📦 STATE
+// ==========================================
+const state = {
+  entries: [],
+  byProvince: new Map(),
+  byAmphure: new Map(),
+  byTambon: new Map(),
+  warningsByZip: new Map(),
+  loaded: false,
+  loading: false,
+  shownZipCount: PAGE_SIZE,
+};
+
+// ==========================================
+// 🧹 UTILS
+// ==========================================
+function normalize(value) {
+  return (value || '').toString().trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+function stripPrefix(name) {
+  return (name || '').toString()
+    .replace(/^(แขวง|ตำบล|ต\.|เขต|อำเภอ|อ\.|จังหวัด|จ\.|จว\.)\s*/, '')
+    .trim();
+}
+
+function normalizeForMatch(value) {
+  return normalize(stripPrefix(value));
+}
+
+function escapeHTML(str) {
+  return (str || '').toString()
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function toArray(data) {
+  if (Array.isArray(data)) return data;
+  if (data && typeof data === 'object') return [data];
+  return [];
+}
+
+// ==========================================
+// 📥 DATA LOADING (อ่านจาก <script> ที่ฝังไว้)
+// ==========================================
+function loadDatabases() {
+  if (state.loaded || state.loading) return;
+  state.loading = true;
+
+  try {
+    const provinceEl = document.getElementById('db-provinces');
+    const overlapEl = document.getElementById('db-overlaps');
+
+    if (!provinceEl || !overlapEl) {
+      throw new Error('ไม่พบแท็ก <script id="db-provinces"> หรือ <script id="db-overlaps">');
+    }
+
+    const provinceText = provinceEl.textContent.trim();
+    const overlapText = overlapEl.textContent.trim();
+
+    if (provinceText === 'PASTE_PROVINCES_JSON_HERE') {
+      throw new Error('ยังไม่ได้วาง JSON ของ database.json (placeholder ยังอยู่)');
+    }
+    if (overlapText === 'PASTE_OVERLAPS_JSON_HERE') {
+      throw new Error('ยังไม่ได้วาง JSON ของ overlap_cases_database.json (placeholder ยังอยู่)');
+    }
+
+    const provinceRes = JSON.parse(provinceText);
+    const overlapRes = JSON.parse(overlapText);
+
+    buildIndexes(toArray(provinceRes), toArray(overlapRes));
+    fillDatalists();
+
+    state.loaded = true;
+    state.loading = false;
+
+    if (state.entries.length === 0) {
+      setStatus('error', '❌ ข้อมูลฝังในไฟล์ว่างเปล่า');
+    }
+  } catch (err) {
+    state.loading = false;
+    console.error(err);
+    setStatus('error', '❌ อ่านข้อมูลฝังไม่สำเร็จ: ' + err.message);
+  }
+}
+
+function buildIndexes(provinces, overlaps) {
+  state.entries = [];
+
+  for (const p of provinces) {
+    if (!p || !p.name_th || !Array.isArray(p.districts)) continue;
+    for (const d of p.districts) {
+      if (!d || !d.name_th || !Array.isArray(d.sub_districts)) continue;
+      for (const s of d.sub_districts) {
+        if (!s || !s.name_th) continue;
+        state.entries.push({
+          province: p.name_th,
+          amphure: d.name_th,
+          tambon: s.name_th,
+          zip: String(s.zip_code || ''),
+        });
+      }
+    }
+  }
+
+  state.warningsByZip = new Map();
+  for (const o of overlaps) {
+    if (!o || !o.zip_code) continue;
+    if (o.warningMessage) {
+      state.warningsByZip.set(String(o.zip_code), {
+        title: o.title || '',
+        message: o.warningMessage,
+      });
+    }
+  }
+
+  state.byProvince = groupBy(state.entries, e => e.province);
+  state.byAmphure = groupBy(state.entries, e => e.amphure);
+  state.byTambon = groupBy(state.entries, e => e.tambon);
+
+  console.log(`✅ Loaded ${state.entries.length} entries, ${state.warningsByZip.size} warnings`);
+}
+
+function groupBy(arr, keyFn) {
+  const map = new Map();
+  for (const item of arr) {
+    const key = keyFn(item);
+    if (!key) continue;
+    if (!map.has(key)) map.set(key, []);
+    map.get(key).push(item);
+  }
+  return map;
+}
+
+function fillDatalists() {
+  fillDatalist('dl-tambon', Array.from(state.byTambon.keys()).sort());
+  fillDatalist('dl-amphure', Array.from(state.byAmphure.keys()).sort());
+  fillDatalist('dl-province', Array.from(state.byProvince.keys()).sort());
+  // zip ทั้งหมด (ไม่ใช่แค่ที่มี warning)
+  const allZips = new Set(state.entries.map(e => e.zip).filter(Boolean));
+  fillDatalist('dl-zip', Array.from(allZips).sort());
+}
+
+function fillDatalist(id, values) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const frag = document.createDocumentFragment();
+  for (const v of values) {
+    const opt = document.createElement('option');
+    opt.value = v;
+    frag.appendChild(opt);
+  }
+  el.innerHTML = '';
+  el.appendChild(frag);
+}
+
+// ==========================================
+// 🔍 FILTER
+// ==========================================
+function readFilters() {
+  return {
+    tambon: document.getElementById('f-tambon').value.trim(),
+    amphure: document.getElementById('f-amphure').value.trim(),
+    province: document.getElementById('f-province').value.trim(),
+    zip: document.getElementById('f-zip').value.trim(),
+  };
+}
+
+function countFilledFilters(filters) {
+  let count = 0;
+  if (filters.tambon) count++;
+  if (filters.amphure) count++;
+  if (filters.province) count++;
+  if (filters.zip.length === 5) count++;
+  return count;
+}
+
+function filterCandidates(filters) {
+  const t = normalizeForMatch(filters.tambon);
+  const a = normalizeForMatch(filters.amphure);
+  const p = normalizeForMatch(filters.province);
+  const z = filters.zip.length === 5 ? filters.zip : '';
+
+  return state.entries.filter(e => {
+    if (t && !normalizeForMatch(e.tambon).includes(t)) return false;
+    if (a && !normalizeForMatch(e.amphure).includes(a)) return false;
+    if (p && !normalizeForMatch(e.province).includes(p)) return false;
+    if (z && e.zip !== z) return false;
+    return true;
+  });
+}
+
+// ==========================================
+// 🖼 RENDER
+// ==========================================
+function setStatus(type, message) {
+  const el = document.getElementById('status');
+  el.className = type;
+  el.innerText = message;
+}
+
+function clearStatus() {
+  const el = document.getElementById('status');
+  el.className = '';
+  el.innerText = '';
+}
+
+function runSearch() {
+  if (!state.loaded) {
+    setStatus('info', '⏳ ฐานข้อมูลยังโหลดไม่เสร็จ กรุณารอสักครู่');
+    return;
+  }
+
+  const filters = readFilters();
+  const filled = countFilledFilters(filters);
+  const hasFullZip = filters.zip.length === 5;
+
+  // zip 5 หลัก = ข้อยกเว้น ไม่ต้องนับ 2 ช่อง
+  if (filled < 2 && !hasFullZip) {
+    setStatus('warn', '⚠️ กรุณากรอกอย่างน้อย 2 ช่อง (หรือกรอกรหัสไปรษณีย์ 5 หลัก)');
+    document.getElementById('results').innerHTML = '';
+    return;
+  }
+
+  const candidates = filterCandidates(filters);
+
+  if (candidates.length === 0) {
+    // ใส่แค่ zip เดียว → ข้อความ error specific
+    if (hasFullZip && filled === 1) {
+      setStatus('error', `❌ ไม่พบรหัสไปรษณีย์ ${filters.zip} ในฐานข้อมูล`);
+    } else {
+      setStatus('warn', 'ไม่พบข้อมูลที่ตรงกับเงื่อนไข ลองลด filter หรือตรวจการสะกด');
+    }
+    document.getElementById('results').innerHTML = '';
+    return;
+  }
+
+  clearStatus();
+  state.shownZipCount = PAGE_SIZE;
+  renderResults(candidates);
+}
+
+function renderResults(candidates) {
+  const container = document.getElementById('results');
+
+  const byZip = new Map();
+  for (const c of candidates) {
+    if (!byZip.has(c.zip)) byZip.set(c.zip, []);
+    byZip.get(c.zip).push(c);
+  }
+
+  const totalZips = byZip.size;
+  const zipList = Array.from(byZip.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+  const visible = zipList.slice(0, state.shownZipCount);
+
+  let html = `<p class="summary">พบ ${totalZips} รหัสไปรษณีย์ (${candidates.length} รายการ)</p>`;
+  for (const [zip, items] of visible) {
+    html += renderZipRow(zip, items);
+  }
+  if (totalZips > state.shownZipCount) {
+    html += `<button id="showMoreBtn">แสดงเพิ่ม (${totalZips - state.shownZipCount} รหัส)</button>`;
+  }
+
+  container.innerHTML = html;
+
+  container.querySelectorAll('.addr-item').forEach(el => {
+    el.addEventListener('click', () => {
+      document.getElementById('f-tambon').value = el.dataset.tambon;
+      document.getElementById('f-amphure').value = el.dataset.amphure;
+      document.getElementById('f-province').value = el.dataset.province;
+      document.getElementById('f-zip').value = el.dataset.zip;
+      runSearch();
+    });
+  });
+
+  const moreBtn = document.getElementById('showMoreBtn');
+  if (moreBtn) {
+    moreBtn.addEventListener('click', () => {
+      state.shownZipCount += PAGE_SIZE;
+      renderResults(candidates);
+    });
+  }
+}
+
+function renderZipRow(zip, items) {
+  const warning = state.warningsByZip.get(zip);
+  const hasWarning = !!warning;
+
+  const addrItems = items.map(i => `
+    <div class="addr-item"
+         data-tambon="${escapeHTML(i.tambon)}"
+         data-amphure="${escapeHTML(i.amphure)}"
+         data-province="${escapeHTML(i.province)}"
+         data-zip="${escapeHTML(zip)}">
+      ต.${escapeHTML(i.tambon)} · อ.${escapeHTML(i.amphure)} · จ.${escapeHTML(i.province)}
+    </div>
+  `).join('');
+
+  const warningHtml = hasWarning ? `
+    <div class="warning">
+      ${warning.title ? `<div class="warning-title">📌 ${escapeHTML(warning.title)}</div>` : ''}
+      <div>${escapeHTML(warning.message)}</div>
+    </div>
+  ` : '';
+
+  return `
+    <div class="zip-row ${hasWarning ? 'has-warning' : ''}">
+      <div class="zip-code">${escapeHTML(zip)}</div>
+      <div class="addr-list">${addrItems}</div>
+      ${warningHtml}
+    </div>
+  `;
+}
+
+// ==========================================
+// 🎛 EVENTS
+// ==========================================
+function resetFilters() {
+  document.getElementById('f-tambon').value = '';
+  document.getElementById('f-amphure').value = '';
+  document.getElementById('f-province').value = '';
+  document.getElementById('f-zip').value = '';
+  document.getElementById('results').innerHTML = '';
+  state.shownZipCount = PAGE_SIZE;
+  clearStatus();
+}
+
+function wireEvents() {
+  document.getElementById('searchBtn').addEventListener('click', runSearch);
+  document.getElementById('resetBtn').addEventListener('click', resetFilters);
+
+  ['f-tambon', 'f-amphure', 'f-province', 'f-zip'].forEach(id => {
+    document.getElementById(id).addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') runSearch();
+    });
+  });
+
+  document.getElementById('f-zip').addEventListener('input', (e) => {
+    e.target.value = e.target.value.replace(/\D/g, '').slice(0, 5);
+  });
+}
+
+// ==========================================
+// 🚀 INIT
+// ==========================================
+document.addEventListener('DOMContentLoaded', () => {
+  wireEvents();
+  loadDatabases();
+});
+</script>
+</body>
+</html>
