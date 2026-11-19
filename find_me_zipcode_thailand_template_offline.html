@@ -190,9 +190,6 @@ const PAGE_SIZE = 20;
 // ==========================================
 const state = {
   entries: [],
-  byProvince: new Map(),
-  byAmphure: new Map(),
-  byTambon: new Map(),
   warningsByZip: new Map(),
   loaded: false,
   loading: false,
@@ -260,7 +257,7 @@ function loadDatabases() {
     const overlapRes = JSON.parse(overlapText);
 
     buildIndexes(toArray(provinceRes), toArray(overlapRes));
-    fillDatalists();
+    refreshDatalists();
 
     state.loaded = true;
     state.loading = false;
@@ -289,6 +286,9 @@ function buildIndexes(provinces, overlaps) {
           amphure: d.name_th,
           tambon: s.name_th,
           zip: String(s.zip_code || ''),
+          np: normalizeForMatch(p.name_th),
+          na: normalizeForMatch(d.name_th),
+          nt: normalizeForMatch(s.name_th),
         });
       }
     }
@@ -305,31 +305,38 @@ function buildIndexes(provinces, overlaps) {
     }
   }
 
-  state.byProvince = groupBy(state.entries, e => e.province);
-  state.byAmphure = groupBy(state.entries, e => e.amphure);
-  state.byTambon = groupBy(state.entries, e => e.tambon);
-
   console.log(`✅ Loaded ${state.entries.length} entries, ${state.warningsByZip.size} warnings`);
 }
 
-function groupBy(arr, keyFn) {
-  const map = new Map();
-  for (const item of arr) {
-    const key = keyFn(item);
-    if (!key) continue;
-    if (!map.has(key)) map.set(key, []);
-    map.get(key).push(item);
+// ==========================================
+// 🔗 CASCADING SUGGESTIONS (ตัดช้อยตามช่องที่กรอกแล้ว)
+// ==========================================
+// คืนค่าที่เป็นไปได้ของ targetField โดยอิงจากค่าที่กรอกไว้ในช่อง *อื่น*
+function getSuggestions(targetField, filters) {
+  const t = targetField === 'tambon'   ? '' : normalizeForMatch(filters.tambon);
+  const a = targetField === 'amphure'  ? '' : normalizeForMatch(filters.amphure);
+  const p = targetField === 'province' ? '' : normalizeForMatch(filters.province);
+  const z = targetField === 'zip'      ? '' : (filters.zip.length === 5 ? filters.zip : '');
+
+  const set = new Set();
+  for (const e of state.entries) {
+    if (t && !e.nt.includes(t)) continue;
+    if (a && !e.na.includes(a)) continue;
+    if (p && !e.np.includes(p)) continue;
+    if (z && e.zip !== z) continue;
+    if (e[targetField]) set.add(e[targetField]);
   }
-  return map;
+  return Array.from(set).sort();
 }
 
-function fillDatalists() {
-  fillDatalist('dl-tambon', Array.from(state.byTambon.keys()).sort());
-  fillDatalist('dl-amphure', Array.from(state.byAmphure.keys()).sort());
-  fillDatalist('dl-province', Array.from(state.byProvince.keys()).sort());
-  // zip ทั้งหมด (ไม่ใช่แค่ที่มี warning)
-  const allZips = new Set(state.entries.map(e => e.zip).filter(Boolean));
-  fillDatalist('dl-zip', Array.from(allZips).sort());
+// rebuild datalist ของทุกช่อง ยกเว้นช่องที่กำลังพิมพ์อยู่ (excludeField)
+// ใช้ event 'input' → ตัวเลือกจะค่อยๆ แคบลงตามที่ผู้ใช้กรอก
+function refreshDatalists(excludeField) {
+  const filters = readFilters();
+  for (const f of ['tambon', 'amphure', 'province', 'zip']) {
+    if (f === excludeField) continue;
+    fillDatalist('dl-' + f, getSuggestions(f, filters));
+  }
 }
 
 function fillDatalist(id, values) {
@@ -373,9 +380,9 @@ function filterCandidates(filters) {
   const z = filters.zip.length === 5 ? filters.zip : '';
 
   return state.entries.filter(e => {
-    if (t && !normalizeForMatch(e.tambon).includes(t)) return false;
-    if (a && !normalizeForMatch(e.amphure).includes(a)) return false;
-    if (p && !normalizeForMatch(e.province).includes(p)) return false;
+    if (t && !e.nt.includes(t)) return false;
+    if (a && !e.na.includes(a)) return false;
+    if (p && !e.np.includes(p)) return false;
     if (z && e.zip !== z) return false;
     return true;
   });
@@ -460,6 +467,7 @@ function renderResults(candidates) {
       document.getElementById('f-amphure').value = el.dataset.amphure;
       document.getElementById('f-province').value = el.dataset.province;
       document.getElementById('f-zip').value = el.dataset.zip;
+      refreshDatalists();
       runSearch();
     });
   });
@@ -511,6 +519,7 @@ function resetFilters() {
   document.getElementById('f-amphure').value = '';
   document.getElementById('f-province').value = '';
   document.getElementById('f-zip').value = '';
+  refreshDatalists();
   document.getElementById('results').innerHTML = '';
   state.shownZipCount = PAGE_SIZE;
   clearStatus();
@@ -521,13 +530,17 @@ function wireEvents() {
   document.getElementById('resetBtn').addEventListener('click', resetFilters);
 
   ['f-tambon', 'f-amphure', 'f-province', 'f-zip'].forEach(id => {
+    const field = id.slice(2); // 'tambon' | 'amphure' | 'province' | 'zip'
     document.getElementById(id).addEventListener('keydown', (e) => {
       if (e.key === 'Enter') runSearch();
     });
-  });
-
-  document.getElementById('f-zip').addEventListener('input', (e) => {
-    e.target.value = e.target.value.replace(/\D/g, '').slice(0, 5);
+    document.getElementById(id).addEventListener('input', () => {
+      if (id === 'f-zip') {
+        const el = document.getElementById(id);
+        el.value = el.value.replace(/\D/g, '').slice(0, 5);
+      }
+      refreshDatalists(field);
+    });
   });
 }
 
